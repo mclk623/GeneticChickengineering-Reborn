@@ -38,49 +38,71 @@ public class PocketChicken extends SimpleSlimefunItem<ItemUseHandler> implements
         super(itemGroup, item, recipeType, recipe);
     }
 
-    @Override
-    @Nonnull
-    public ItemUseHandler getItemHandler() {
-        return e -> {
-            e.cancel();
+@Override
+@Nonnull
+public ItemUseHandler getItemHandler() {
+    return e -> {
+        e.cancel();
 
-            Optional<Block> block = e.getClickedBlock();
-            if (block.isEmpty()) {
-                return;
+        Optional<Block> block = e.getClickedBlock();
+        if (block.isEmpty()) {
+            return;
+        }
+
+        Block b = block.get();
+        Location location = b.getRelative(e.getClickedFace()).getLocation();
+        
+        ItemMeta meta = e.getItem().getItemMeta();
+        JsonObject json = PersistentDataAPI.get(meta, Keys.POCKET_CHICKEN_ADAPTER, ADAPTER);
+        
+        // 修复点1：如果数据损坏，直接消耗物品并返回（可选生成普通鸡）
+        if (json == null) {
+            // 如果你想给玩家一个"安慰奖"：生成一只无基因的鸡
+            // Chicken entity = b.getWorld().spawn(location.toCenterLocation(), Chicken.class);
+            
+            // 直接删除损坏的物品
+            if (e.getPlayer().getGameMode() != GameMode.CREATIVE) {
+                ItemUtils.consumeItem(e.getItem(), false);
             }
+            e.getPlayer().sendMessage(ChatColor.RED + "这个口袋鸡已损坏，已被移除");
+            return;
+        }
 
-            Block b = block.get();
-            Location location = b.getRelative(e.getClickedFace()).getLocation();
-            Chicken entity = b.getWorld().spawn(location.toCenterLocation(), Chicken.class);
-
-            ItemMeta meta = e.getItem().getItemMeta();
-            JsonObject json = PersistentDataAPI.get(meta, Keys.POCKET_CHICKEN_ADAPTER, ADAPTER);
+        // 正常流程：生成鸡并应用数据
+        Chicken entity = b.getWorld().spawn(location.toCenterLocation(), Chicken.class);
+        
+        try {
             ADAPTER.apply(entity, json);
             int[] dnaState = PersistentDataAPI.getIntArray(meta, Keys.POCKET_CHICKEN_DNA);
-            DNA dna;
-            if (dnaState != null) {
-                dna = new DNA(dnaState);
-            } else {
-                dna = new DNA();
-            }
+            DNA dna = (dnaState != null) ? new DNA(dnaState) : new DNA();
 
             String dss = dna.getStateString();
             PersistentDataAPI.setString(entity, Keys.CHICKEN_DNA, dss);
 
-            if (e.getPlayer().getGameMode() != GameMode.CREATIVE) {
-                ItemUtils.consumeItem(e.getItem(), false);
-            }
-
             if (GeneticChickengineering.getConfigService().isDisplayResources() && dna.isKnown()) {
                 String name = ChatColor.WHITE + "(" + ChickenTypes.getDisplayName(dna.getTyping()) + ")";
-                if (json != null && !json.get("_customName").isJsonNull()) {
+                if (!json.get("_customName").isJsonNull()) {
                     name = json.get("_customName").getAsString() + " " + name;
                 }
                 entity.setCustomName(name);
                 entity.setCustomNameVisible(true);
             }
-        };
-    }
+        } catch (Exception ex) {
+            // 修复点2：万一apply失败，移除生成的鸡并消耗物品
+            entity.remove();
+            if (e.getPlayer().getGameMode() != GameMode.CREATIVE) {
+                ItemUtils.consumeItem(e.getItem(), false);
+            }
+            e.getPlayer().sendMessage(ChatColor.RED + "口袋鸡数据应用失败，物品已移除");
+            return;
+        }
+
+        // 修复点3：确保消耗物品（移到finally或每个分支都处理）
+        if (e.getPlayer().getGameMode() != GameMode.CREATIVE) {
+            ItemUtils.consumeItem(e.getItem(), false);
+        }
+    };
+}
 
     @Override
     @ParametersAreNonnullByDefault
