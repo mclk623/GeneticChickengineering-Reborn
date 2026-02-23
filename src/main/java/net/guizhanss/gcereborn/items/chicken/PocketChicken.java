@@ -7,6 +7,7 @@ import javax.annotation.ParametersAreNonnullByDefault;
 
 import com.google.gson.JsonObject;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -14,6 +15,7 @@ import org.bukkit.block.Block;
 import org.bukkit.entity.Chicken;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.plugin.java.JavaPlugin;
 
 import io.github.thebusybiscuit.slimefun4.api.items.ItemGroup;
 import io.github.thebusybiscuit.slimefun4.api.items.SlimefunItemStack;
@@ -90,7 +92,8 @@ public class PocketChicken extends SimpleSlimefunItem<ItemUseHandler> implements
                 PersistentDataAPI.setString(entity, Keys.CHICKEN_DNA, defaultDna.getStateString());
                 
                 e.getPlayer().sendMessage(ChatColor.RED + "§l[系统] §c口袋鸡数据异常，已降级为普通鸡");
-                GeneticChickengineering.inst().getLogger().warning("PocketChicken 数据应用失败: " + ex.getMessage());
+                // 修复：使用 Bukkit.getLogger() 替代 inst()
+                Bukkit.getLogger().warning("[GeneticChickengineering] PocketChicken 数据应用失败: " + ex.getMessage());
             }
             
             // 【关键修复】确保无论如何（成功、损坏、异常）都消耗物品
