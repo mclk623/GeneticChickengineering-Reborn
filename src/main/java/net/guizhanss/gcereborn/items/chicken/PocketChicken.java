@@ -50,34 +50,52 @@ public class PocketChicken extends SimpleSlimefunItem<ItemUseHandler> implements
             }
 
             Block b = block.get();
-            Location location = b.getRelative(e.getClickedFace()).getLocation();
-            Chicken entity = b.getWorld().spawn(location.toCenterLocation(), Chicken.class);
-
+            Location location = b.getRelative(e.getClickedFace()).getLocation().toCenterLocation();
             ItemMeta meta = e.getItem().getItemMeta();
             JsonObject json = PersistentDataAPI.get(meta, Keys.POCKET_CHICKEN_ADAPTER, ADAPTER);
-            ADAPTER.apply(entity, json);
-            int[] dnaState = PersistentDataAPI.getIntArray(meta, Keys.POCKET_CHICKEN_DNA);
-            DNA dna;
-            if (dnaState != null) {
-                dna = new DNA(dnaState);
-            } else {
-                dna = new DNA();
+            
+            // 生成鸡实体
+            Chicken entity = b.getWorld().spawn(location, Chicken.class);
+            
+            try {
+                if (json == null) {
+                    // 【降级处理】数据损坏，设为普通鸡（野生DNA）
+                    DNA defaultDna = new DNA();
+                    PersistentDataAPI.setString(entity, Keys.CHICKEN_DNA, defaultDna.getStateString());
+                    e.getPlayer().sendMessage(ChatColor.YELLOW + "§l[系统] §e口袋鸡数据已损坏，降级为普通鸡");
+                } else {
+                    // 正常处理流程
+                    ADAPTER.apply(entity, json);
+                    
+                    int[] dnaState = PersistentDataAPI.getIntArray(meta, Keys.POCKET_CHICKEN_DNA);
+                    DNA dna = (dnaState != null) ? new DNA(dnaState) : new DNA();
+                    PersistentDataAPI.setString(entity, Keys.CHICKEN_DNA, dna.getStateString());
+
+                    // 设置显示名称
+                    if (GeneticChickengineering.getConfigService().isDisplayResources() && dna.isKnown()) {
+                        String name = ChatColor.WHITE + "(" + ChickenTypes.getDisplayName(dna.getTyping()) + ")";
+                        if (json.has("_customName") && !json.get("_customName").isJsonNull()) {
+                            name = json.get("_customName").getAsString() + " " + name;
+                        }
+                        entity.setCustomName(name);
+                        entity.setCustomNameVisible(true);
+                    }
+                }
+            } catch (Exception ex) {
+                // 【异常降级】apply失败时，移除错误实体，生成新的普通鸡
+                entity.remove();
+                entity = b.getWorld().spawn(location, Chicken.class);
+                
+                DNA defaultDna = new DNA();
+                PersistentDataAPI.setString(entity, Keys.CHICKEN_DNA, defaultDna.getStateString());
+                
+                e.getPlayer().sendMessage(ChatColor.RED + "§l[系统] §c口袋鸡数据异常，已降级为普通鸡");
+                GeneticChickengineering.inst().getLogger().warning("PocketChicken 数据应用失败: " + ex.getMessage());
             }
-
-            String dss = dna.getStateString();
-            PersistentDataAPI.setString(entity, Keys.CHICKEN_DNA, dss);
-
+            
+            // 【关键修复】确保无论如何（成功、损坏、异常）都消耗物品
             if (e.getPlayer().getGameMode() != GameMode.CREATIVE) {
                 ItemUtils.consumeItem(e.getItem(), false);
-            }
-
-            if (GeneticChickengineering.getConfigService().isDisplayResources() && dna.isKnown()) {
-                String name = ChatColor.WHITE + "(" + ChickenTypes.getDisplayName(dna.getTyping()) + ")";
-                if (json != null && !json.get("_customName").isJsonNull()) {
-                    name = json.get("_customName").getAsString() + " " + name;
-                }
-                entity.setCustomName(name);
-                entity.setCustomNameVisible(true);
             }
         };
     }
